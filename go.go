@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -22,8 +23,19 @@ const (
 // Define error type for quitting (called "sentinel error" in Go)
 var ErrQuit = fmt.Errorf("quit")
 
+// Make the game board at startup
+func newBoard(x int, y int) [][]Stone {
+	// Arrays have to have a fixed hard-coded size, but slices can be dynamic
+	// so we use a 2D slice so the baord can be any size
+	board := make([][]Stone, x)
+	for i := range board {
+		board[i] = make([]Stone, y)
+	}
+	return board
+}
+
 // just print the board
-func printBoard(board [9][9]Stone) {
+func printBoard(board [][]Stone) {
 
 	go_symbols := map[Stone]string{
 		Empty: ".",
@@ -31,8 +43,19 @@ func printBoard(board [9][9]Stone) {
 		White: "●",
 	}
 
-	fmt.Println("  1 2 3 4 5 6 7 8 9")
-	var rowIndex = [9]string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
+	// Needs to be dynamic based on board size
+	// kind of tricky but basically just generating the numbers from 0 to board witdh and joins with spaces
+	s := make([]string, len(board[0]))
+	for i := 0; i < len(board[0]); i++ {
+		s[i] = strconv.Itoa(i + 1) // convert int to string and offset by 1 since no 0 column
+	}
+	fmt.Println("  ", strings.Join(s, " "))
+
+	// Same for the row labels but letters instead of numbers
+	rowIndex := make([]string, len(board))
+	for i := 0; i < len(board); i++ {
+		rowIndex[i] = string('a' + i) // can do arithmetic on ascii
+	}
 
 	for i := 0; i < len(board); i++ {
 		fmt.Print(rowIndex[i] + " ")
@@ -102,16 +125,16 @@ func parseMove(move string) (byte, byte, error) {
 // Place a stone on the board, checking for validity
 // Passing a pointer to the board with "*" so any changes we make to it affect the original board, not a copy
 // Go has cool error handling. we set the function to return an "error" type, and nil means no error
-func placeStone(board *[9][9]Stone, row byte, col byte, color Stone) error {
+func placeStone(board *[][]Stone, row byte, col byte, color Stone) error {
 	// Check if the position is already occupied
-	if board[row][col] != Empty {
+	if (*board)[row][col] != Empty {
 		return fmt.Errorf("position %c%d is already occupied", 'a'+row, col+1)
 	}
 
 	// TODO: add more rule checks if needed
 
 	// Place the stone
-	board[row][col] = color
+	(*board)[row][col] = color
 	return nil
 }
 
@@ -129,8 +152,7 @@ func main() {
 	// 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
 	// }
 
-	// Initialize the empty game board
-	var board [9][9]Stone
+	board := newBoard(9, 9)
 
 	// Keep track of turns. Even = black, odd = white
 	var turn byte = 0
@@ -145,6 +167,45 @@ func main() {
 	fmt.Println(" \"quit\" to quit anytime")
 	fmt.Println("")
 
+	// Setup
+	fmt.Println("What size board would you like?")
+	fmt.Println("a. 9x9")
+	fmt.Println("b. 13x13")
+	fmt.Println("c. 19x19")
+	fmt.Println("d. Custom")
+
+	board_size_input, _ := reader.ReadString('\n')
+	board_size_input = strings.TrimSpace(strings.ToLower(board_size_input))
+	switch board_size_input {
+	case "a":
+		board = newBoard(9, 9)
+	case "b":
+		board = newBoard(13, 13)
+	case "c":
+		board = newBoard(19, 19)
+	case "d":
+		fmt.Println("Enter custom board size in this format: 17x9")
+		custom_size_input, _ := reader.ReadString('\n')
+		custom_size_input = strings.TrimSpace(strings.ToLower(custom_size_input))
+		// Parse the custom size input (kind of error-prone but whatever)
+		// split the input on "x" and convert to integers
+		size_parts := strings.Split(custom_size_input, "x")
+		if len(size_parts) != 2 {
+			fmt.Println("Invalid custom size format. Defaulting to 9x9.")
+			board = newBoard(9, 9)
+		} else {
+			rows, err1 := strconv.Atoi(size_parts[0])
+			cols, err2 := strconv.Atoi(size_parts[1])
+			if err1 != nil || err2 != nil {
+				fmt.Println("Invalid custom size format. Defaulting to 9x9.")
+				board = newBoard(9, 9)
+			} else {
+				board = newBoard(rows, cols)
+			}
+		}
+	}
+
+	// Main game loop
 	for {
 
 		printBoard(board)
