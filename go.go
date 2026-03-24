@@ -34,6 +34,17 @@ func newBoard(x int, y int) [][]Stone {
 	return board
 }
 
+func rowLabel(i int) string {
+	// just calculates the row label if we have more than 26 rows
+	// same logic as in parseMove
+	var label string = ""
+	for i >= 0 {
+		label = string('a'+(i%26)) + label
+		i = i/26 - 1
+	}
+	return label
+}
+
 // just print the board
 func printBoard(board [][]Stone) {
 
@@ -52,9 +63,10 @@ func printBoard(board [][]Stone) {
 	fmt.Println("  ", strings.Join(s, " "))
 
 	// Same for the row labels but letters instead of numbers
+	// also need to handle >26 rows
 	rowIndex := make([]string, len(board))
 	for i := 0; i < len(board); i++ {
-		rowIndex[i] = string('a' + i) // can do arithmetic on ascii
+		rowIndex[i] = rowLabel(i)
 	}
 
 	for i := 0; i < len(board); i++ {
@@ -68,7 +80,7 @@ func printBoard(board [][]Stone) {
 }
 
 // Read the move from cli input and convert to row/col indices
-func parseMove(move string) (byte, byte, error) {
+func parseMove(move string) (int, int, error) {
 
 	// Get rid of whitespace and force to lowercase
 	move = strings.TrimSpace(strings.ToLower(move))
@@ -81,54 +93,55 @@ func parseMove(move string) (byte, byte, error) {
 		}
 	}
 
-	// Moves have to be a letter and number
-	if len(move) != 2 {
-		return 0, 0, fmt.Errorf("invalid move format: %q", move)
-	}
-
-	// Grab the row and col
-	r := move[0]
-	c := move[1]
-
-	// I want to do better than this:
-	// coordinate := map[string]byte{
-	// 	"a": 0, "1": 0,
-	// 	"b": 1, "2": 1,
-	// 	"c": 2, "3": 2,
-	// 	"d": 3, "4": 3,
-	// 	"e": 4, "5": 4,
-	// 	"f": 5, "6": 5,
-	// 	"g": 6, "7": 6,
-	// 	"h": 7, "8": 7,
-	// 	"i": 8, "9": 8,
+	// // Moves have to be a letter and number
+	// if len(move) != 2 {
+	// 	return 0, 0, fmt.Errorf("invalid move format: %q", move)
 	// }
 
-	// go apparently lets you do arithmetic on letters since they are just bytes, like 'a' + 2 == 'c'
-	// So we really don't even need to make a coordinate table
+	// // Grab the row and col
+	// r := move[0]
+	// c := move[1]
 
-	// Check if the row is in acceptable range
-	// We just need to offset the letter by the value of 'a' to convert to 0-8 index
-	// TODO: fix hardcoding for 9x9
-	if r < 'a' || r > 'i' {
-		return 0, 0, fmt.Errorf("invalid row: %q (expected a-i)", r)
+	// Because the board can be any size, we need to be able to handle >26 rows and >9 cols
+	// for rows we could do a-z, then aa-zz, etc.
+	// for cols we just stick to regular integers allowing for more digits
+	// So we need to split the move into the letter part and the number part
+	var rPart string
+	var cPart string
+	for _, char := range move {
+		if char >= 'a' && char <= 'z' {
+			rPart += string(char)
+		} else if char >= '0' && char <= '9' {
+			cPart += string(char)
+		} else {
+			return 0, 0, fmt.Errorf("invalid character in move: %q", char)
+		}
 	}
 
-	// Check the column
-	if c < '1' || c > '9' {
-		return 0, 0, fmt.Errorf("invalid column: %q (expected 1-9)", c)
+	// now we convert the rPart to a row index. I think just adding their values together would work
+	var r int = 0
+	for _, char := range rPart {
+		r = r*26 + int(char-'a'+1)
 	}
+	r = r - 1 // offset by 1 for 0-indexing
 
-	// Looks good, return indices
-	return r - 'a', c - '1', nil
+	// Convert cPart to column index
+	c, err := strconv.Atoi(cPart)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid column: %q", cPart)
+	}
+	c = c - 1 // offset by 1 for 0-indexing
+
+	return r, c, nil
 }
 
 // Place a stone on the board, checking for validity
 // Passing a pointer to the board with "*" so any changes we make to it affect the original board, not a copy
 // Go has cool error handling. we set the function to return an "error" type, and nil means no error
-func placeStone(board *[][]Stone, row byte, col byte, color Stone) error {
+func placeStone(board *[][]Stone, row int, col int, color Stone) error {
 	// Check if the position is already occupied
 	if (*board)[row][col] != Empty {
-		return fmt.Errorf("position %c%d is already occupied", 'a'+row, col+1)
+		return fmt.Errorf("position %s%d is already occupied", rowLabel(row), col+1)
 	}
 
 	// TODO: add more rule checks if needed
