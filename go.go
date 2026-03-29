@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"hash/fnv"
 )
 
 // Making a custom type for stones so we don't have to remember 0,1,2 for colors
@@ -19,6 +20,12 @@ const (
 	Black
 	White
 )
+
+type Move struct {
+	Row, Col int
+}
+
+
 
 // Define error type for quitting (called "sentinel error" in Go)
 var ErrQuit = fmt.Errorf("quit")
@@ -135,6 +142,29 @@ func parseMove(move string) (int, int, error) {
 	return r, c, nil
 }
 
+func hashMove(board [][]Stone, row int, col int, stone Stone) uint64 {
+	// Place the stone temporarily to get a hash for the board state
+	// This will be used to add the board state to hashtory and to check ko rule beforehand
+
+	// start the hashing
+	h := fnv.New64a()
+	// go through the board to build up the hash
+	for r, currentRow := range board {
+		for c, cell := range currentRow {
+			if r == row && c == col {
+				// Write the current color for this cell, since it's the move being checked
+				h.Write([]byte{byte(stone)})
+			} else {
+				// Write what's already there in the board
+				h.Write([]byte{byte(cell)})
+			}
+		}
+	}
+
+	// compute the hash value
+	return h.Sum64()
+}
+
 // Place a stone on the board, checking for validity
 // Passing a pointer to the board with "*" so any changes we make to it affect the original board, not a copy
 // Go has cool error handling. we set the function to return an "error" type, and nil means no error
@@ -144,7 +174,7 @@ func placeStone(board *[][]Stone, row int, col int, color Stone) error {
 		return fmt.Errorf("position %s%d is already occupied", rowLabel(row), col+1)
 	}
 
-	// TODO: add more rule checks if needed
+	checkAllRules
 
 	// Place the stone
 	(*board)[row][col] = color
@@ -169,6 +199,11 @@ func main() {
 
 	// Keep track of turns. Even = black, odd = white
 	var turn byte = 0
+
+	// Keep track of moves. Made a struct with two ints, row & col
+	moves := []Move{}
+	// Also track board states by hashing them
+	moveHashes := []uint64{}
 
 	// Initialize reader to get cli input
 	reader := bufio.NewReader(os.Stdin)
@@ -253,8 +288,12 @@ func main() {
 		if placeErr != nil {
 			fmt.Println("Error placing stone:", placeErr)
 		} else {
+			// Save the move for Ko rule
+			moves = append(moves, Move{Row: row, Col: col})
+			moveHashes = append(hashMove(board,row,col,Stone((turn%2)+1)))
 			turn++
 		}
 
 	}
 }
+
