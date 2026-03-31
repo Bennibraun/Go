@@ -10,6 +10,7 @@
 * @method validateSuicide private
 * @method undo
 * @method render
+
 * @method show private
 * 
 * @method getHashtory private
