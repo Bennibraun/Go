@@ -25,6 +25,14 @@ type Move struct {
 	Row, Col int
 }
 
+// The directions that groups can be connected in
+// useful for counting liberties and checking rules
+var directions = []Move{
+    {Row: -1, Col: 0},
+    {Row: 1, Col: 0},
+    {Row: 0, Col: -1},
+    {Row: 0, Col: 1},
+}
 
 
 // Define error type for quitting (called "sentinel error" in Go)
@@ -168,39 +176,38 @@ func hashMove(board [][]Stone, row int, col int, stone Stone) uint64 {
 // Place a stone on the board, checking for validity
 // Passing a pointer to the board with "*" so any changes we make to it affect the original board, not a copy
 // Go has cool error handling. we set the function to return an "error" type, and nil means no error
-func placeStone(board *[][]Stone, moveHashes *[]uint64, row int, col int, color Stone) error {
+func placeStone(board *[][]Stone, moveHashes *[]uint64, row int, col int, color Stone) (int, error) {
+	// Check if the position exists
+	if !isOnBoard(*board, row, col) {
+		return 0, fmt.Errorf("position %s%d is out of bounds", rowLabel(row), col+1)
+	}
+
 	// Check if the position is already occupied
 	if (*board)[row][col] != Empty {
-		return fmt.Errorf("position %s%d is already occupied", rowLabel(row), col+1)
+		return 0, fmt.Errorf("position %s%d is already occupied", rowLabel(row), col+1)
 	}
 
 	// Check all the rules for this move. If any rule is violated, return the error message
 	if err := checkAllRules(*board, *moveHashes, row, col, color); err != nil {
-		return err
+		return 0, err
 	}
 
 	// Place the stone
 	(*board)[row][col] = color
 	// Add the new board state to the move history
 	*moveHashes = append(*moveHashes, hashMove(*board, row, col, color))
-	return nil
+
+	// check for captures and remove any captured stones
+	numRemoved := removeCapturedStones(*board, row, col, color)
+	if numRemoved > 0 {
+		fmt.Printf("Removed %d captured stones.\n", numRemoved)
+	}
+
+
+	return numRemoved, nil
 }
 
 func main() {
-
-	// var board = [9][9]byte{
-	// 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	// 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	// 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	// 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	// 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	// 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	// 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	// 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	// 	{0, 0, 0, 0, 0, 0, 0, 0, 0},
-	// }
-
-	board := newBoard(9, 9)
 
 	// Keep track of turns. Even = black, odd = white
 	var turn byte = 0
@@ -209,6 +216,10 @@ func main() {
 	moves := []Move{}
 	// Also track board states by hashing them
 	moveHashes := []uint64{}
+
+	// track scores (number of captured stones) for each color
+	var blackScore int = 0
+	var whiteScore int = 0
 
 	// Initialize reader to get cli input
 	reader := bufio.NewReader(os.Stdin)
@@ -226,6 +237,8 @@ func main() {
 	fmt.Println("b. 13x13")
 	fmt.Println("c. 19x19")
 	fmt.Println("d. Custom")
+
+	var board [][]Stone
 
 	board_size_input, _ := reader.ReadString('\n')
 	board_size_input = strings.TrimSpace(strings.ToLower(board_size_input))
@@ -288,13 +301,23 @@ func main() {
 		}
 
 		// Place the stone on the board
-		placeErr := placeStone(&board, &moveHashes, row, col, Stone((turn%2)+1))
+		numRemoved, placeErr := placeStone(&board, &moveHashes, row, col, Stone((turn%2)+1))
 		// Make sure it worked before incrementing the turn, otherwise if there was an error placing the stone we want the same player to try again
 		if placeErr != nil {
 			fmt.Println("Error placing stone:", placeErr)
 		} else {
 			// Save the move for Ko rule
 			moves = append(moves, Move{Row: row, Col: col})
+			// increment the score for the current color for any captured stones
+			if numRemoved > 0 {
+				if turn%2 == 0 {
+					blackScore += numRemoved
+				} else {
+					whiteScore += numRemoved
+				}
+				fmt.Printf("Black score: %d, White score: %d\n", blackScore, whiteScore)
+			}
+
 			turn++
 		}
 
