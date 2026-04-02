@@ -168,16 +168,21 @@ func hashMove(board [][]Stone, row int, col int, stone Stone) uint64 {
 // Place a stone on the board, checking for validity
 // Passing a pointer to the board with "*" so any changes we make to it affect the original board, not a copy
 // Go has cool error handling. we set the function to return an "error" type, and nil means no error
-func placeStone(board *[][]Stone, row int, col int, color Stone) error {
+func placeStone(board *[][]Stone, moveHashes *[]uint64, row int, col int, color Stone) error {
 	// Check if the position is already occupied
 	if (*board)[row][col] != Empty {
 		return fmt.Errorf("position %s%d is already occupied", rowLabel(row), col+1)
 	}
 
-	checkAllRules
+	// Check all the rules for this move. If any rule is violated, return the error message
+	if err := checkAllRules(*board, *moveHashes, row, col, color); err != nil {
+		return err
+	}
 
 	// Place the stone
 	(*board)[row][col] = color
+	// Add the new board state to the move history
+	*moveHashes = append(*moveHashes, hashMove(*board, row, col, color))
 	return nil
 }
 
@@ -283,14 +288,13 @@ func main() {
 		}
 
 		// Place the stone on the board
-		placeErr := placeStone(&board, row, col, Stone((turn%2)+1))
+		placeErr := placeStone(&board, &moveHashes, row, col, Stone((turn%2)+1))
 		// Make sure it worked before incrementing the turn, otherwise if there was an error placing the stone we want the same player to try again
 		if placeErr != nil {
 			fmt.Println("Error placing stone:", placeErr)
 		} else {
 			// Save the move for Ko rule
 			moves = append(moves, Move{Row: row, Col: col})
-			moveHashes = append(hashMove(board,row,col,Stone((turn%2)+1)))
 			turn++
 		}
 
